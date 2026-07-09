@@ -11,8 +11,6 @@ on:
       - 'devices/**'
       - 'scripts/**'
       - '.github/workflows/build.yml'
-  schedule:
-    - cron: "0 */2 * * *"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -23,15 +21,17 @@ permissions:
 
 env:
   UPSTREAM_REPO: JuliusBairaktaris/openwrt-nss-edma
-  UPSTREAM_REF: nss-edma-rework
+  UPSTREAM_REF: 060dac5051b540e0d3b63455c4109de9ffa15b96
   NSS_REPO: JuliusBairaktaris/nss-packages
-  NSS_REF: edma-nss
+  NSS_REF: e621a636073478a1325ec5eb02f58b207d0329a2
   TARGET: qualcommax/ipq807x
   DEVICE: xiaomi_ax3600
   VARIANT: edma-nss
   RELEASE_PREFIX: edma-nss
   KEEP: "2"                     # newest releases to retain
-  FEEDS: "src-git nss https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss"
+  FEEDS: |
+    src-git nss https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss
+    src-git awg https://github.com/Slava-Shchipunov/awg-openwrt.git
 
 jobs:
   check:
@@ -122,6 +122,15 @@ jobs:
             echo "::warning::Parallel build failed; retrying single-threaded for diagnostics"
             make -j1 V=s
           fi
+
+      - name: Upload awg packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-packages
+          if-no-files-found: error
+          path: |
+            openwrt/bin/targets/qualcommax/ipq807x/packages/kmod-amneziawg*.apk
+            openwrt/bin/packages/aarch64_cortex-a53/awg/*.apk
 
       - name: Publish release
         id: release
