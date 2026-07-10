@@ -132,6 +132,17 @@ jobs:
             openwrt/bin/targets/qualcommax/ipq807x/packages/kmod-amneziawg*.apk
             openwrt/bin/packages/aarch64_cortex-a53/awg/*.apk
 
+      - name: Upload symvers diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: symvers-diagnostics
+          if-no-files-found: warn
+          path: |
+            openwrt/build_dir/target-aarch64_cortex-a53_musl/linux-qualcommax_ipq807x/symvers/*.symvers
+            openwrt/bin/targets/qualcommax/ipq807x/packages/kmod-crypto-lib-*.apk
+            openwrt/bin/targets/qualcommax/ipq807x/packages/kmod-udptunnel*.apk
+
       - name: Publish release
         id: release
         env:
