@@ -1,38 +1,46 @@
-kmod-amneziawg: pass crypto-lib/udptunnel symvers explicitly
+kmod-amneziawg: explicitly pass the kernel's own Module.symvers
 
-On the openwrt-nss-edma fork, $(KERNEL_MAKE_FLAGS) only sets
-KBUILD_EXTRA_SYMBOLS to a fixed NSS-oriented set
-(gpio-button-hotplug, qca-mcs, qca-ppe-nss) rather than deriving it
-from this package's own DEPENDS. amneziawg.ko therefore links against
-kmod-udptunnel4/6 and kmod-crypto-lib-chacha20poly1305/curve25519
-(all four already built as declared DEPENDS) but modpost cannot see
-their exported symbols, and fails with:
+modpost fails with:
 
   ERROR: modpost: "chacha20poly1305_encrypt_sg_inplace" [amneziawg.ko] undefined!
   ERROR: modpost: "curve25519" [amneziawg.ko] undefined!
   ...
 
-The shared symvers directory lives one level above $(LINUX_DIR) here
-($(LINUX_DIR) resolves to .../linux-qualcommax_ipq807x/linux-6.18.38
-in this package's own Build/Compile, while the directory the fork
-populates is .../linux-qualcommax_ipq807x/symvers/ - confirmed from
-the gpio-button-hotplug package's own compile line and its
-mkdir+mv-to-symvers/ install step in the same build log). List all
-seven at $(LINUX_DIR)/../symvers/ instead of relying on the fork's
-fixed three-file default.
+These are not a kernel-6.18 API drift: lib/crypto/chacha20poly1305.c
+in mainline 6.18.38 (hash ac26e508... pinned by
+target/linux/generic/kernel-6.18 in this fork) still exports every
+one of these names via plain EXPORT_SYMBOL, unnamespaced. The module
+compiles cleanly (main.o..junk.o, LD amneziawg.o) - this is purely a
+link-time symbol visibility problem.
+
+Per include/kernel.mk in this fork:
+  - KBUILD_EXTRA_SYMBOLS normally auto-expands to
+    $(wildcard $(KERNEL_BUILD_DIR)/symvers/*.symvers) (kernel.mk:118).
+  - Individual kmod packages populate that directory via the
+    collect_module_symvers post-compile hook - but that hook is
+    explicitly skipped when PKG_NAME is "kernel" (kernel.mk:158).
+  - kmod-udptunnel4/6 and kmod-crypto-lib-chacha20poly1305/curve25519
+    are all defined in package/kernel/linux/modules/*.mk and built as
+    part of the single combined package/kernel/linux compile pass
+    (PKG_NAME=kernel there), so they never get a
+    $(KERNEL_BUILD_DIR)/symvers/<name>.symvers snapshot - by design,
+    their exports are meant to be picked up from the kernel's own
+    $(LINUX_DIR)/Module.symvers, which any M= external-module build
+    reads automatically without needing KBUILD_EXTRA_SYMBOLS at all.
+
+That automatic pickup evidently isn't happening for this package (two
+earlier attempts guessing at nonexistent per-package snapshot files -
+$(LINUX_DIR)/symvers/*.symvers and $(LINUX_DIR)/../symvers/*.symvers -
+both confirmed those files simply don't exist for these four
+packages). Pass $(LINUX_DIR)/Module.symvers explicitly as a
+belt-and-suspenders fix.
 
 --- a/kmod-amneziawg/Makefile
 +++ b/kmod-amneziawg/Makefile
-@@ -39,6 +39,13 @@
+@@ -39,6 +39,7 @@
  		M="$(PKG_BUILD_DIR)/$(MAKE_PATH)" \
  		EXTRA_CFLAGS="$(BUILDFLAGS)" \
  		WIREGUARD_VERSION="$(WIREGUARD_VERSION)" \
-+		KBUILD_EXTRA_SYMBOLS="$(LINUX_DIR)/../symvers/gpio-button-hotplug.symvers \
-+			$(LINUX_DIR)/../symvers/qca-mcs.symvers \
-+			$(LINUX_DIR)/../symvers/qca-ppe-nss.symvers \
-+			$(LINUX_DIR)/../symvers/udptunnel4.symvers \
-+			$(LINUX_DIR)/../symvers/udptunnel6.symvers \
-+			$(LINUX_DIR)/../symvers/crypto-lib-chacha20poly1305.symvers \
-+			$(LINUX_DIR)/../symvers/crypto-lib-curve25519.symvers" \
++		KBUILD_EXTRA_SYMBOLS="$(LINUX_DIR)/Module.symvers" \
  		modules
  endef
