@@ -56,7 +56,7 @@ jobs:
     needs: check
     if: needs.check.outputs.need == 'true'
     runs-on: ubuntu-26.04
-    timeout-minutes: 360
+    timeout-minutes: 420
     permissions:
       contents: write
     env:
@@ -123,14 +123,15 @@ jobs:
             make -j1 V=s
           fi
 
-      - name: Upload awg packages
+      - name: Upload package feed
         uses: actions/upload-artifact@v4
         with:
-          name: awg-packages
+          name: package-feed
           if-no-files-found: error
+          retention-days: 90
           path: |
-            openwrt/bin/targets/qualcommax/ipq807x/packages/kmod-amneziawg*.apk
-            openwrt/bin/packages/aarch64_cortex-a53/awg/*.apk
+            openwrt/bin/targets/qualcommax/ipq807x/packages/**
+            openwrt/bin/packages/aarch64_cortex-a53/**
 
       - name: Publish release
         id: release
