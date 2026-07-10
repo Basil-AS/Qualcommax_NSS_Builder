@@ -1,0 +1,35 @@
+kmod-amneziawg: pass crypto-lib/udptunnel symvers explicitly
+
+On the openwrt-nss-edma fork, $(KERNEL_MAKE_FLAGS) only sets
+KBUILD_EXTRA_SYMBOLS to a fixed NSS-oriented set
+(gpio-button-hotplug, qca-mcs, qca-ppe-nss) rather than deriving it
+from this package's own DEPENDS. amneziawg.ko therefore links against
+kmod-udptunnel4/6 and kmod-crypto-lib-chacha20poly1305/curve25519
+(all four already built as declared DEPENDS) but modpost cannot see
+their exported symbols, and fails with:
+
+  ERROR: modpost: "chacha20poly1305_encrypt_sg_inplace" [amneziawg.ko] undefined!
+  ERROR: modpost: "curve25519" [amneziawg.ko] undefined!
+  ...
+
+The four symvers files exist under $(LINUX_DIR)/symvers/ once their
+kmod packages are built (same directory/naming convention observed
+for the three NSS ones above) - list them explicitly instead of
+relying on the fork's fixed set. Keep the original three so nothing
+that did rely on them regresses.
+
+--- a/kmod-amneziawg/Makefile
++++ b/kmod-amneziawg/Makefile
+@@ -39,6 +39,13 @@
+ 		M="$(PKG_BUILD_DIR)/$(MAKE_PATH)" \
+ 		EXTRA_CFLAGS="$(BUILDFLAGS)" \
+ 		WIREGUARD_VERSION="$(WIREGUARD_VERSION)" \
++		KBUILD_EXTRA_SYMBOLS="$(LINUX_DIR)/symvers/gpio-button-hotplug.symvers \
++			$(LINUX_DIR)/symvers/qca-mcs.symvers \
++			$(LINUX_DIR)/symvers/qca-ppe-nss.symvers \
++			$(LINUX_DIR)/symvers/udptunnel4.symvers \
++			$(LINUX_DIR)/symvers/udptunnel6.symvers \
++			$(LINUX_DIR)/symvers/crypto-lib-chacha20poly1305.symvers \
++			$(LINUX_DIR)/symvers/crypto-lib-curve25519.symvers" \
+ 		modules
+ endef
