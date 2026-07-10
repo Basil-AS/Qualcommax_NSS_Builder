@@ -12,11 +12,14 @@ their exported symbols, and fails with:
   ERROR: modpost: "curve25519" [amneziawg.ko] undefined!
   ...
 
-The four symvers files exist under $(LINUX_DIR)/symvers/ once their
-kmod packages are built (same directory/naming convention observed
-for the three NSS ones above) - list them explicitly instead of
-relying on the fork's fixed set. Keep the original three so nothing
-that did rely on them regresses.
+The shared symvers directory lives one level above $(LINUX_DIR) here
+($(LINUX_DIR) resolves to .../linux-qualcommax_ipq807x/linux-6.18.38
+in this package's own Build/Compile, while the directory the fork
+populates is .../linux-qualcommax_ipq807x/symvers/ - confirmed from
+the gpio-button-hotplug package's own compile line and its
+mkdir+mv-to-symvers/ install step in the same build log). List all
+seven at $(LINUX_DIR)/../symvers/ instead of relying on the fork's
+fixed three-file default.
 
 --- a/kmod-amneziawg/Makefile
 +++ b/kmod-amneziawg/Makefile
@@ -24,12 +27,12 @@ that did rely on them regresses.
  		M="$(PKG_BUILD_DIR)/$(MAKE_PATH)" \
  		EXTRA_CFLAGS="$(BUILDFLAGS)" \
  		WIREGUARD_VERSION="$(WIREGUARD_VERSION)" \
-+		KBUILD_EXTRA_SYMBOLS="$(LINUX_DIR)/symvers/gpio-button-hotplug.symvers \
-+			$(LINUX_DIR)/symvers/qca-mcs.symvers \
-+			$(LINUX_DIR)/symvers/qca-ppe-nss.symvers \
-+			$(LINUX_DIR)/symvers/udptunnel4.symvers \
-+			$(LINUX_DIR)/symvers/udptunnel6.symvers \
-+			$(LINUX_DIR)/symvers/crypto-lib-chacha20poly1305.symvers \
-+			$(LINUX_DIR)/symvers/crypto-lib-curve25519.symvers" \
++		KBUILD_EXTRA_SYMBOLS="$(LINUX_DIR)/../symvers/gpio-button-hotplug.symvers \
++			$(LINUX_DIR)/../symvers/qca-mcs.symvers \
++			$(LINUX_DIR)/../symvers/qca-ppe-nss.symvers \
++			$(LINUX_DIR)/../symvers/udptunnel4.symvers \
++			$(LINUX_DIR)/../symvers/udptunnel6.symvers \
++			$(LINUX_DIR)/../symvers/crypto-lib-chacha20poly1305.symvers \
++			$(LINUX_DIR)/../symvers/crypto-lib-curve25519.symvers" \
  		modules
  endef
