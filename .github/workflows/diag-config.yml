@@ -22,7 +22,7 @@ jobs:
   diag:
     name: Resolve .config (no build)
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Install build dependencies
         run: |
@@ -55,6 +55,12 @@ jobs:
           set -euo pipefail
           echo "===== top-level CONFIG_PACKAGE_kmod-crypto-lib / udptunnel ====="
           grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib|udptunnel)' .config || echo "NONE FOUND"
+
+      - name: Build tools + toolchain (prerequisites for target/linux/compile)
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          make tools/install toolchain/install -j"$(nproc)" V=s
 
       - name: Build vmlinux (generates the real kernel .config as a side effect)
         working-directory: openwrt
