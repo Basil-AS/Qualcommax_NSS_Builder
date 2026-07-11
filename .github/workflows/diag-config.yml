@@ -1,0 +1,85 @@
+name: Diag Config
+
+# One-off: resolve .config via `make defconfig` only, no compile. Answers
+# whether CONFIG_CRYPTO_LIB_CHACHA20POLY1305/CURVE25519 are actually
+# selected =y/=m or missing entirely, without paying for a full kernel build.
+on:
+  workflow_dispatch:
+
+env:
+  UPSTREAM_REPO: JuliusBairaktaris/openwrt-nss-edma
+  UPSTREAM_REF: 060dac5051b540e0d3b63455c4109de9ffa15b96
+  NSS_REPO: JuliusBairaktaris/nss-packages
+  NSS_REF: e621a636073478a1325ec5eb02f58b207d0329a2
+  TARGET: qualcommax/ipq807x
+  DEVICE: xiaomi_ax3600
+  VARIANT: edma-nss
+  FEEDS: |
+    src-git nss https://github.com/JuliusBairaktaris/nss-packages.git;edma-nss
+    src-git awg https://github.com/Slava-Shchipunov/awg-openwrt.git
+
+jobs:
+  diag:
+    name: Resolve .config (no build)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y bzip2 g++ gawk gcc git glibc-source libncurses-dev make rsync
+
+      - name: Checkout OpenWrt source
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: ${{ env.UPSTREAM_REF }}
+          fetch-depth: 0
+          path: openwrt
+
+      - name: Checkout builder repo
+        uses: actions/checkout@v7
+        with:
+          path: builder
+
+      - name: Prepare build environment
+        env:
+          OPENWRT_DIR: ${{ github.workspace }}/openwrt
+          BUILDER_REPO: ${{ github.workspace }}/builder
+        run: bash builder/scripts/prepare-build.sh
+
+      - name: Dump crypto lib config resolution
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          {
+            echo "## .config resolution for crypto-lib chain"
+            echo '```'
+            echo "-- CONFIG_CRYPTO_LIB_* (chacha/poly1305/curve25519/utils) --"
+            grep -E 'CONFIG_CRYPTO_LIB_(CHACHA|POLY1305|CURVE25519|UTILS)' .config || echo "(no matches - not even 'is not set' lines present)"
+            echo
+            echo "-- CONFIG_PACKAGE_kmod-crypto-lib-* / kmod-udptunnel* --"
+            grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib-(chacha|poly1305|curve25519)|udptunnel)' .config || echo "(no matches)"
+            echo
+            echo "-- CONFIG_PACKAGE_kmod-amneziawg / amneziawg-tools / luci-proto-amneziawg --"
+            grep -E 'CONFIG_PACKAGE_(kmod-amneziawg|amneziawg-tools|luci-proto-amneziawg)' .config || echo "(no matches)"
+            echo
+            echo "-- kernel version line --"
+            grep -E '^CONFIG_LINUX_VERSION|^CONFIG_KERNEL_VERSION' .config || true
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          # Also fail loudly in the raw log so it's visible without opening the summary tab.
+          echo "===== RAW GREP OUTPUT ====="
+          grep -E 'CONFIG_CRYPTO_LIB_(CHACHA|POLY1305|CURVE25519|UTILS)' .config || echo "NONE FOUND"
+          echo "---"
+          grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib|udptunnel)' .config || echo "NONE FOUND"
+
+      - name: Upload resolved .config
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-config
+          if-no-files-found: warn
+          path: openwrt/.config
