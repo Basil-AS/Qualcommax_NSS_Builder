@@ -22,7 +22,7 @@ jobs:
   diag:
     name: Resolve .config (no build)
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Install build dependencies
         run: |
@@ -49,37 +49,54 @@ jobs:
           BUILDER_REPO: ${{ github.workspace }}/builder
         run: bash builder/scripts/prepare-build.sh
 
-      - name: Dump crypto lib config resolution
+      - name: Dump top-level .config (OpenWrt package selections only)
         working-directory: openwrt
         run: |
           set -euo pipefail
+          echo "===== top-level CONFIG_PACKAGE_kmod-crypto-lib / udptunnel ====="
+          grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib|udptunnel)' .config || echo "NONE FOUND"
+
+      - name: Prepare kernel tree (configure only, no module compile)
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          make target/linux/prepare V=s
+
+      - name: Dump REAL kernel .config
+        working-directory: openwrt
+        run: |
+          set -euo pipefail
+          KCFG=$(find build_dir -maxdepth 4 -path '*linux-6.18.38/.config' | head -1)
+          echo "kernel .config path: ${KCFG:-NOT FOUND}"
           {
-            echo "## .config resolution for crypto-lib chain"
+            echo "## Kernel-level .config resolution for crypto-lib chain"
             echo '```'
-            echo "-- CONFIG_CRYPTO_LIB_* (chacha/poly1305/curve25519/utils) --"
-            grep -E 'CONFIG_CRYPTO_LIB_(CHACHA|POLY1305|CURVE25519|UTILS)' .config || echo "(no matches - not even 'is not set' lines present)"
-            echo
-            echo "-- CONFIG_PACKAGE_kmod-crypto-lib-* / kmod-udptunnel* --"
-            grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib-(chacha|poly1305|curve25519)|udptunnel)' .config || echo "(no matches)"
-            echo
-            echo "-- CONFIG_PACKAGE_kmod-amneziawg / amneziawg-tools / luci-proto-amneziawg --"
-            grep -E 'CONFIG_PACKAGE_(kmod-amneziawg|amneziawg-tools|luci-proto-amneziawg)' .config || echo "(no matches)"
-            echo
-            echo "-- kernel version line --"
-            grep -E '^CONFIG_LINUX_VERSION|^CONFIG_KERNEL_VERSION' .config || true
+            if [[ -n "$KCFG" ]]; then
+              echo "-- CONFIG_CRYPTO_LIB_* (chacha/poly1305/curve25519/utils) --"
+              grep -E 'CONFIG_CRYPTO_LIB_(CHACHA|POLY1305|CURVE25519|UTILS)' "$KCFG" || echo "(no matches - not even 'is not set' lines present)"
+              echo
+              echo "-- CONFIG_CRYPTO_CHACHA20/POLY1305/CURVE25519 (non-lib, generic impl) --"
+              grep -E 'CONFIG_CRYPTO_(CHACHA20|POLY1305|CURVE25519)' "$KCFG" || echo "(no matches)"
+            else
+              echo "kernel .config not found under build_dir"
+            fi
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
 
-          # Also fail loudly in the raw log so it's visible without opening the summary tab.
-          echo "===== RAW GREP OUTPUT ====="
-          grep -E 'CONFIG_CRYPTO_LIB_(CHACHA|POLY1305|CURVE25519|UTILS)' .config || echo "NONE FOUND"
-          echo "---"
-          grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib|udptunnel)' .config || echo "NONE FOUND"
+          echo "===== RAW KERNEL .config GREP ====="
+          if [[ -n "$KCFG" ]]; then
+            grep -E 'CONFIG_CRYPTO_LIB_(CHACHA|POLY1305|CURVE25519|UTILS)' "$KCFG" || echo "NONE FOUND"
+            echo "---generic (non-lib) chacha/poly1305/curve25519---"
+            grep -E 'CONFIG_CRYPTO_(CHACHA20|POLY1305|CURVE25519)' "$KCFG" || echo "NONE FOUND"
+            cp "$KCFG" "$GITHUB_WORKSPACE/kernel.config"
+          fi
 
-      - name: Upload resolved .config
+      - name: Upload resolved configs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: resolved-config
           if-no-files-found: warn
-          path: openwrt/.config
+          path: |
+            openwrt/.config
+            kernel.config
