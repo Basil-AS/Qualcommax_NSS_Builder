@@ -22,7 +22,7 @@ jobs:
   diag:
     name: Resolve .config (no build)
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Install build dependencies
         run: |
@@ -56,17 +56,19 @@ jobs:
           echo "===== top-level CONFIG_PACKAGE_kmod-crypto-lib / udptunnel ====="
           grep -E 'CONFIG_PACKAGE_kmod-(crypto-lib|udptunnel)' .config || echo "NONE FOUND"
 
-      - name: Prepare kernel tree (configure only, no module compile)
+      - name: Build vmlinux (generates the real kernel .config as a side effect)
         working-directory: openwrt
         run: |
           set -euo pipefail
-          make target/linux/prepare V=s
+          make target/linux/compile -j"$(nproc)" V=s
 
       - name: Dump REAL kernel .config
         working-directory: openwrt
         run: |
           set -euo pipefail
-          KCFG=$(find build_dir -maxdepth 4 -path '*linux-6.18.38/.config' | head -1)
+          echo "all .config files under build_dir:"
+          find build_dir -name '.config' 2>&1 || true
+          KCFG=$(find build_dir -path '*linux-6.18.38/.config' | head -1)
           echo "kernel .config path: ${KCFG:-NOT FOUND}"
           {
             echo "## Kernel-level .config resolution for crypto-lib chain"
